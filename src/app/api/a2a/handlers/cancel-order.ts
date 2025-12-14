@@ -8,7 +8,7 @@ import type { ChefAgentResponse } from "@/lib/a2a/schema";
 export async function handleCancelOrder(
   tenantId: string,
   orderId: string
-): Promise<ChefAgentResponse> {
+): Promise<void> {
   try {
     console.log(`[Chef handleCancelOrder] Cancelling order ${orderId}`);
 
@@ -21,20 +21,14 @@ export async function handleCancelOrder(
     );
 
     if (orderResult.rows.length === 0) {
-      return {
-        success: false,
-        error: `Order ${orderId} not found`,
-      };
+      throw new Error(`Order ${orderId} not found`);
     }
 
     const chefOrder = orderResult.rows[0];
 
     // Check if order can be cancelled
     if (chefOrder.status === "READY" || chefOrder.status === "SERVED") {
-      return {
-        success: false,
-        error: `Cannot cancel order - already ${chefOrder.status.toLowerCase()}`,
-      };
+      throw new Error(`Cannot cancel order - already ${chefOrder.status.toLowerCase()}`);
     }
 
     // Update order status to CANCELLED
@@ -49,16 +43,9 @@ export async function handleCancelOrder(
     // This would reverse the inventory_transactions
 
     console.log(`[Chef handleCancelOrder] ✅ Order ${orderId} cancelled`);
-
-    return {
-      success: true,
-      data: {},
-    };
+    return;
   } catch (error) {
     console.error("[Chef handleCancelOrder] Error:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to cancel order",
-    };
+    throw error;
   }
 }

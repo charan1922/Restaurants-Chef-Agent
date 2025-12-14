@@ -14,6 +14,11 @@ import { handleCancelOrder } from "./handlers/cancel-order";
  * A2A message handler for Chef Agent
  * Receives messages from Waiter Agent
  */
+/**
+ * POST /api/a2a
+ * A2A message handler for Chef Agent (JSON-RPC 2.0)
+ * Receives messages from Waiter Agent
+ */
 export async function POST(request: NextRequest) {
   try {
     // Extract tenant from headers or environment
@@ -22,9 +27,10 @@ export async function POST(request: NextRequest) {
     if (!tenantId) {
       return NextResponse.json(
         {
-          success: false,
-          error: "Tenant ID missing - multi-tenant routing failed",
-        } as ChefAgentResponse,
+          jsonrpc: "2.0",
+          error: { code: -32600, message: "Tenant ID missing - multi-tenant routing failed" },
+          id: null
+        },
         { status: 400 }
       );
     }
@@ -37,76 +43,86 @@ export async function POST(request: NextRequest) {
       console.error("[Chef Agent] Invalid A2A message:", parsed.error);
       return NextResponse.json(
         {
-          success: false,
-          error: `Invalid message format: ${parsed.error.message}`,
-        } as ChefAgentResponse,
+          jsonrpc: "2.0",
+          error: { code: -32600, message: `Invalid Request: ${parsed.error.message}` },
+          id: null
+        },
         { status: 400 }
       );
     }
 
-    const message: ChefAgentRequest = parsed.data;
+    const message = parsed.data;
+    const { method, params, id } = message;
 
-    console.log(`[Chef Agent] 📥 Received ${message.type} from Waiter (Tenant: ${tenantId})`);
+    console.log(`[Chef Agent] 📥 Received ${method} from Waiter (Tenant: ${tenantId})`);
 
     // Route to appropriate handler
-    let response: ChefAgentResponse;
+    let result: any;
+    let error: any;
 
-    switch (message.type) {
-      case "PLACE_ORDER":
-        if ("orderId" in message.payload && "tableId" in message.payload) {
-          response = await handlePlaceOrder(tenantId, message.payload);
-        } else {
-          response = {
-            success: false,
-            error: "Invalid PLACE_ORDER payload",
-          };
-        }
-        break;
+    try {
+      switch (method) {
+        case "placeOrder":
+          // Validate params matches OrderSchema structure roughly
+          if (params && params.orderId && params.items) {
+            result = await handlePlaceOrder(tenantId, params);
+          } else {
+            throw new Error("Invalid params for placeOrder");
+          }
+          break;
 
-      case "REQUEST_STATUS":
-        if ("orderId" in message.payload) {
-          response = await handleRequestStatus(tenantId, message.payload.orderId);
-        } else {
-          response = {
-            success: false,
-            error: "Invalid REQUEST_STATUS payload - orderId required",
-          };
-        }
-        break;
+        case "getOrderStatus":
+          if (params && params.orderId) {
+            result = await handleRequestStatus(tenantId, params.orderId);
+          } else {
+            throw new Error("Invalid params for getOrderStatus");
+          }
+          break;
 
-      case "CANCEL_ORDER":
-        if ("orderId" in message.payload) {
-          response = await handleCancelOrder(tenantId, message.payload.orderId);
-        } else {
-          response = {
-            success: false,
-            error: "Invalid CANCEL_ORDER payload - orderId required",
-          };
-        }
-        break;
+        case "cancelOrder":
+          if (params && params.orderId) {
+            await handleCancelOrder(tenantId, params.orderId);
+            result = {}; // Void return
+          } else {
+            throw new Error("Invalid params for cancelOrder");
+          }
+          break;
 
-      default:
-        response = {
-          success: false,
-          error: `Unknown message type: ${message.type}`,
-        };
+        default:
+          throw new Error(`Method not found: ${method}`);
+      }
+    } catch (e: any) {
+      error = {
+        code: -32603,
+        message: e.message || "Internal RPC Error"
+      };
     }
 
     // Log response
-    if (response.success) {
-      console.log(`[Chef Agent] ✅ ${message.type} processed successfully`);
+    if (!error) {
+      console.log(`[Chef Agent] ✅ ${method} processed successfully`);
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        result,
+        id
+      });
     } else {
-      console.error(`[Chef Agent] ❌ ${message.type} failed:`, response.error);
+      console.error(`[Chef Agent] ❌ ${method} failed:`, error.message);
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        error,
+        id
+      });
     }
 
-    return NextResponse.json(response);
   } catch (error) {
     console.error("[Chef Agent] Unhandled error:", error);
     return NextResponse.json(
       {
-        success: false,
-        error: error instanceof Error ? error.message : "Internal server error",
-      } as ChefAgentResponse,
+        jsonrpc: "2.0",
+        error: { code: -32603, message: error instanceof Error ? error.message : "Internal server error" },
+        id: null
+      },
       { status: 500 }
     );
   }

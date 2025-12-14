@@ -16,7 +16,7 @@ import { deductInventory, checkIngredientAvailability } from "@/services/invento
 export async function handlePlaceOrder(
   tenantId: string,
   order: Order
-): Promise<ChefAgentResponse> {
+): Promise<OrderStatusResponse> {
   try {
     console.log(`[Chef handlePlaceOrder] Processing order ${order.orderId} for tenant ${tenantId}`);
 
@@ -24,16 +24,7 @@ export async function handlePlaceOrder(
     const availabilityCheck = await checkIngredientAvailability(tenantId, order.items);
     
     if (!availabilityCheck.available) {
-      return {
-        success: false,
-        error: `Missing ingredients: ${availabilityCheck.missingIngredients.join(", ")}`,
-        data: {
-          orderId: order.orderId,
-          status: "CANCELLED",
-          missingIngredients: availabilityCheck.missingIngredients,
-          message: "Cannot fulfill order - insufficient stock",
-        } as OrderStatusResponse,
-      };
+      throw new Error(`Missing ingredients: ${availabilityCheck.missingIngredients.join(", ")}`);
     }
 
     // 2. Calculate ETA based on items and kitchen load
@@ -68,19 +59,13 @@ export async function handlePlaceOrder(
 
     // 6. Return success response
     return {
-      success: true,
-      data: {
-        orderId: order.orderId,
-        status: "CONFIRMED",
-        eta: eta,
-        message: `Order confirmed. Estimated preparation time: ${eta} minutes`,
-      } as OrderStatusResponse,
-    };
+      orderId: order.orderId,
+      status: "CONFIRMED",
+      eta: eta,
+      message: `Order confirmed. Estimated preparation time: ${eta} minutes`,
+    } as OrderStatusResponse;
   } catch (error) {
     console.error("[Chef handlePlaceOrder] Error:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to process order",
-    };
+    throw error;
   }
 }

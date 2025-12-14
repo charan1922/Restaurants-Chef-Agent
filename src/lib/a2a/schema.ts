@@ -62,36 +62,35 @@ export const OrderStatusResponseSchema = z.object({
 export type OrderStatusResponse = z.infer<typeof OrderStatusResponseSchema>;
 
 /**
- * Chef Agent Message Types
+ * JSON-RPC 2.0 Request Schema
  */
-export const ChefMessageType = z.enum([
-  "PLACE_ORDER",
-  "REQUEST_STATUS",
-  "CANCEL_ORDER",
-]);
-
-export type ChefMessageTypeValue = z.infer<typeof ChefMessageType>;
-
-/**
- * Chef Agent Request
- */
-export const ChefAgentRequestSchema = z.object({
-  type: ChefMessageType,
-  payload: z.union([
-    OrderSchema,
-    z.object({ orderId: z.string().uuid() }),
-  ]),
+export const JsonRpcRequestSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  method: z.string(),
+  params: z.any().optional(),
+  id: z.union([z.string(), z.number(), z.null()]),
 });
 
-export type ChefAgentRequest = z.infer<typeof ChefAgentRequestSchema>;
+export type JsonRpcRequest = z.infer<typeof JsonRpcRequestSchema>;
 
 /**
- * Chef Agent Response
+ * JSON-RPC 2.0 Response Schema
  */
-export const ChefAgentResponseSchema = z.object({
-  success: z.boolean(),
-  data: z.union([OrderStatusResponseSchema, z.object({})]).optional(),
-  error: z.string().optional(),
+export const JsonRpcResponseSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  result: z.any().optional(),
+  error: z.object({
+    code: z.number(),
+    message: z.string(),
+    data: z.any().optional(),
+  }).optional(),
+  id: z.union([z.string(), z.number(), z.null()]),
 });
 
-export type ChefAgentResponse = z.infer<typeof ChefAgentResponseSchema>;
+export type JsonRpcResponse = z.infer<typeof JsonRpcResponseSchema>;
+
+// Export aliases for backward compatibility (during refactor)
+export type ChefAgentRequest = JsonRpcRequest;
+export type ChefAgentResponse = JsonRpcResponse;
+export const ChefAgentRequestSchema = JsonRpcRequestSchema;
+export const ChefAgentResponseSchema = JsonRpcResponseSchema;

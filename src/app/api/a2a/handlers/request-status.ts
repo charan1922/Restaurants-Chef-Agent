@@ -8,7 +8,7 @@ import type { ChefAgentResponse, OrderStatusResponse } from "@/lib/a2a/schema";
 export async function handleRequestStatus(
   tenantId: string,
   orderId: string
-): Promise<ChefAgentResponse> {
+): Promise<OrderStatusResponse> {
   try {
     console.log(`[Chef handleRequestStatus] Checking status for order ${orderId}`);
 
@@ -20,10 +20,7 @@ export async function handleRequestStatus(
     );
 
     if (result.rows.length === 0) {
-      return {
-        success: false,
-        error: `Order ${orderId} not found in kitchen queue`,
-      };
+      throw new Error(`Order ${orderId} not found in kitchen queue`);
     }
 
     const chefOrder = result.rows[0];
@@ -35,19 +32,13 @@ export async function handleRequestStatus(
     const remainingETA = Math.max(0, chefOrder.eta_minutes - elapsedMinutes);
 
     return {
-      success: true,
-      data: {
-        orderId: orderId,
-        status: chefOrder.status,
-        eta: remainingETA,
-        message: `Order is ${chefOrder.status.toLowerCase()}. ${remainingETA > 0 ? `ETA: ${remainingETA} minutes` : "Ready for pickup!"}`,
-      } as OrderStatusResponse,
-    };
+      orderId: orderId,
+      status: chefOrder.status,
+      eta: remainingETA,
+      message: `Order is ${chefOrder.status.toLowerCase()}. ${remainingETA > 0 ? `ETA: ${remainingETA} minutes` : "Ready for pickup!"}`,
+    } as OrderStatusResponse;
   } catch (error) {
     console.error("[Chef handleRequestStatus] Error:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to get order status",
-    };
+    throw error;
   }
 }
